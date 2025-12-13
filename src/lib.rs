@@ -4,6 +4,7 @@ pub use tree::Tree;
 pub mod cli;
 pub mod color;
 pub mod config;
+mod git;
 pub mod lua;
 pub mod tree;
 

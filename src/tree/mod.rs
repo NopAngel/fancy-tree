@@ -15,11 +15,14 @@ use std::path::Path;
 mod builder;
 mod charset;
 pub mod entry;
+use crate::git::Git;
 
 // Generates a tree.
-pub struct Tree<'charset, P: AsRef<Path>> {
+pub struct Tree<'git, 'charset, P: AsRef<Path>> {
     /// The root path to start from.
     root: P,
+    /// The optional git state of the directory.
+    git: Option<&'git Git>,
     /// The maximum depth level to display.
     max_level: Option<usize>,
     /// Provides the characters to print when traversing the directory structure.
@@ -40,7 +43,7 @@ pub struct Tree<'charset, P: AsRef<Path>> {
     colors: Option<config::Colors>,
 }
 
-impl<'charset, P> Tree<'charset, P>
+impl<'git, 'charset, P> Tree<'git, 'charset, P>
 where
     P: AsRef<Path>,
 {
@@ -207,7 +210,18 @@ where
     where
         P2: AsRef<Path>,
     {
-        let is_hidden = entry.is_hidden();
+        let path = entry.path();
+        // HACK repository.is_path_ignored apparently doesn't expect a ./ prefix (and
+        //      returns `true` if it has the prefix???)
+        let path = path
+            .strip_prefix("./")
+            .expect("Should be able to strip the ./ prefix");
+        let is_hidden = entry.is_hidden()
+            || self
+                .git
+                .map(|git| git.is_ignored(path).ok())
+                .flatten()
+                .unwrap_or(false);
         self.config
             .as_ref()
             .and_then(|config| config.should_skip(entry, is_hidden).transpose().ok())

@@ -12,7 +12,7 @@ pub struct Builder {
 impl Builder {
     /// Creates a new builder.
     #[inline]
-    pub fn new() -> Builder {
+    pub fn new() -> Self {
         Self {
             add_path_api: false,
         }

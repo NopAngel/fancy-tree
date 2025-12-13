@@ -1,6 +1,7 @@
 //! CLI utilities.
 use crate::color::ColorChoice;
 use crate::config::{self, ConfigDir, ConfigFile as _};
+use crate::git::Git;
 use crate::lua;
 use crate::tree;
 use clap::{Parser, ValueEnum};
@@ -50,10 +51,16 @@ impl Cli {
             return Ok(());
         }
 
+        let git = Git::new(&self.path).expect("Should be able to read the git repository");
+
         // NOTE The Lua state must live as long as the configuration values.
-        let lua_state = lua::state::Builder::new()
-            .build()
-            .expect("The lua state should be valid");
+        let lua_state = {
+            let mut builder = lua::state::Builder::new();
+            if let Some(ref git) = git {
+                builder = builder.with_git(git);
+            }
+            builder.build().expect("The lua state should be valid")
+        };
 
         // TODO Skip loading the config instead of panicking.
         let config_dir = ConfigDir::new().expect("A config dir should be available");
@@ -75,11 +82,17 @@ impl Cli {
             .config(config)
             .icons(icons)
             .colors(colors);
+        if let Some(ref git) = git {
+            builder = builder.git(git);
+        }
         if let Some(level) = self.level {
             builder = builder.max_level(level);
         }
         let tree = builder.build();
-        tree.write_to_stdout()?;
+
+        lua_state.in_git_scope(|| {
+            tree.write_to_stdout().map_err(mlua::Error::external)
+        })?;
 
         Ok(())
     }
