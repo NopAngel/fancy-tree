@@ -1,0 +1,43 @@
+root = true
+
+[*]
+end_of_line = LF
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# Dockerfile
+[Dockerfile]
+indent_style = tab
+indent_size = 4
+
+# JSON
+[*.json]
+indent_style = space
+indent_size = 2
+
+# Lua
+[*.lua]
+indent_style = space
+indent_size = 2
+
+# Markdown
+[*.md]
+# So that a dev can add actual tab characters easily if needed.
+indent_style = tab
+indent_size = unset
+
+# Rust
+[*.rs]
+indent_style = space
+indent_size = 4
+
+# TOML
+[*.toml]
+indent_style = space
+indent_size = 4
+
+# YAML
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2

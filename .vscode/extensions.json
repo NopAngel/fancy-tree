@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "editorconfig.editorconfig",
+    "rust-lang.rust-analyzer",
+    "sumneko.lua",
+    "tamasfe.even-better-toml"
+  ]
+}

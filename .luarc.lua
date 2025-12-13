@@ -1,0 +1,4 @@
+return {
+  ["runtime.version"] = "Lua 5.4",
+  ["workspace.library"] = { "./lua/meta" },
+}

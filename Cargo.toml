@@ -1,0 +1,26 @@
+[package]
+name = "fancy-tree"
+version = "0.1.0"
+edition = "2024"
+exclude = [".editorconfig", ".gitignore", ".luarc.lua", "/lua/"]
+
+[features]
+default = ["lua54", "lua-vendored"]
+lua51 = ["mlua/lua51"]
+lua52 = ["mlua/lua52"]
+lua53 = ["mlua/lua53"]
+lua54 = ["mlua/lua54"]
+lua-vendored = ["mlua/vendored"]
+
+[dependencies]
+clap = { version = "4.5.52", features = ["derive"] }
+directories = "6.0.0"
+either = "1.15.0"
+find-editor = "1.0.0"
+gengo = { version = "0.14", default-features = false }
+glob = "0.3.3"
+mlua = "0.11"
+owo-colors = { version = "4.2.3", features = ["supports-colors"] }
+
+[dev-dependencies]
+rstest = "0.26"

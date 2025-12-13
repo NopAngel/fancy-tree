@@ -1,0 +1,11 @@
+use std::error::Error;
+pub use tree::Tree;
+
+pub mod cli;
+pub mod color;
+pub mod config;
+pub mod lua;
+pub mod tree;
+
+/// The standard result type.
+pub type Result<T = (), E = Box<dyn Error>> = core::result::Result<T, E>;
