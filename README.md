@@ -45,3 +45,4 @@ end
 ```
 
 [default-main-config]: ./src/config/main/config.lua
+[default-icon-config]: ./src/config/icons/icons.lua
