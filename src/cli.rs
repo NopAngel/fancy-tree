@@ -51,18 +51,20 @@ impl Cli {
         }
 
         // NOTE The Lua state must live as long as the configuration values.
-        let lua = lua::new_state().expect("The lua state should be valid");
+        let lua_state = lua::state::Builder::new()
+            .build()
+            .expect("The lua state should be valid");
 
         // TODO Skip loading the config instead of panicking.
         let config_dir = ConfigDir::new().expect("A config dir should be available");
         let config = config_dir
-            .load_main(&lua)
+            .load_main(lua_state.to_inner())
             .expect("The configuration should be valid");
         let icons = config_dir
-            .load_icons(&lua)
+            .load_icons(lua_state.to_inner())
             .expect("The icon configuration should be valid");
         let colors = config_dir
-            .load_colors(&lua)
+            .load_colors(lua_state.to_inner())
             .expect("The color configuration should be valid");
 
         let color_choice = self
