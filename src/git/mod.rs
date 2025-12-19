@@ -21,7 +21,7 @@ impl Git {
     where
         P: AsRef<Path>,
     {
-        let result = Repository::open(root);
+        let result = Repository::discover(root);
         let repo_not_found = result
             .as_ref()
             .is_err_and(|err| matches!(err.code(), git2::ErrorCode::NotFound));
