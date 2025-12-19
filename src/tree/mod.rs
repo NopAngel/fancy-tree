@@ -168,9 +168,7 @@ where
             const NO_STATUS: &str = " ";
 
             // HACK cached status keys don't have a ./ prefix and git2 apparently doesn't it.
-            let path = path
-                .strip_prefix("./")
-                .expect("Should be able to strip the ./ prefix");
+            let path = self.strip_path_prefix(path);
             let untracked_status = git
                 .untracked_status(path)
                 .ok()
@@ -239,9 +237,7 @@ where
         let path = entry.path();
         // HACK repository.is_path_ignored apparently doesn't expect a ./ prefix (and
         //      returns `true` if it has the prefix???)
-        let path = path
-            .strip_prefix("./")
-            .expect("Should be able to strip the ./ prefix");
+        let path = self.strip_path_prefix(path);
         let is_hidden = entry.is_hidden()
             || self
                 .git
@@ -336,5 +332,14 @@ where
                     .flatten()
             })
             .or(Self::DEFAULT_FILE_COLOR)
+    }
+
+    /// Strips the root path prefix, which is necessary for git tools.
+    fn strip_path_prefix<'path>(&self, path: &'path Path) -> &'path Path {
+        let root = self.root.as_ref();
+        let path = path
+            .strip_prefix(root)
+            .expect("Should be able to strip the root path");
+        path
     }
 }
