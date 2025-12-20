@@ -37,7 +37,7 @@ fn test_path_glob_matches(#[case] module: &str) {
 
 #[rstest]
 #[case(include_str!("./test_git_is_ignored_case_1.lua"))]
-#[case(include_str!("./test_git_is_ignored_case_1.lua"))]
+#[case(include_str!("./test_git_is_ignored_case_2.lua"))]
 fn test_git_is_ignored(#[case] module: &str) {
     type TestCase = (bool, bool);
 
