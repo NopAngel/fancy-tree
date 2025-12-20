@@ -1,6 +1,10 @@
 //! Provides the utility for generating a tree.
 use crate::color::{Color, ColorChoice};
 use crate::config;
+use crate::git::{
+    self, Git,
+    status::{self, Status},
+};
 use crate::tree::entry::attributes;
 pub use builder::Builder;
 pub use charset::Charset;
@@ -17,9 +21,11 @@ mod charset;
 pub mod entry;
 
 // Generates a tree.
-pub struct Tree<'charset, P: AsRef<Path>> {
+pub struct Tree<'git, 'charset, P: AsRef<Path>> {
     /// The root path to start from.
     root: P,
+    /// The optional git state of the directory.
+    git: Option<&'git Git>,
     /// The maximum depth level to display.
     max_level: Option<usize>,
     /// Provides the characters to print when traversing the directory structure.
@@ -40,7 +46,7 @@ pub struct Tree<'charset, P: AsRef<Path>> {
     colors: Option<config::Colors>,
 }
 
-impl<'charset, P> Tree<'charset, P>
+impl<'git, 'charset, P> Tree<'git, 'charset, P>
 where
     P: AsRef<Path>,
 {
@@ -157,12 +163,14 @@ where
         W: Write,
         P2: AsRef<Path>,
     {
+        let path = entry.path();
+        self.write_statuses(writer, path)?;
+
         let icon = self.get_icon(entry);
-        self.write_colorized_for(entry, writer, icon)?;
+        self.write_colorized_for_entry(entry, writer, icon)?;
         // NOTE Padding for the icons
         write!(writer, " ")?;
 
-        let path = entry.path();
         Self::write_path(writer, path, full_name)
     }
 
@@ -207,7 +215,16 @@ where
     where
         P2: AsRef<Path>,
     {
-        let is_hidden = entry.is_hidden();
+        let path = entry.path();
+        // HACK repository.is_path_ignored apparently doesn't expect a ./ prefix (and
+        //      returns `true` if it has the prefix???)
+        let path = self.strip_path_prefix(path);
+        let is_hidden = entry.is_hidden()
+            || self
+                .git
+                .map(|git| git.is_ignored(path).ok())
+                .flatten()
+                .unwrap_or(false);
         self.config
             .as_ref()
             .and_then(|config| config.should_skip(entry, is_hidden).transpose().ok())
@@ -249,7 +266,7 @@ where
     }
 
     /// Writes the text in a colored style.
-    fn write_colorized_for<W, D, P2>(
+    fn write_colorized_for_entry<W, D, P2>(
         &self,
         entry: &Entry<P2>,
         writer: &mut W,
@@ -296,5 +313,113 @@ where
                     .flatten()
             })
             .or(Self::DEFAULT_FILE_COLOR)
+    }
+
+    /// Writes colorized git statuses.
+    fn write_statuses<W>(&self, writer: &mut W, path: &Path) -> io::Result<()>
+    where
+        W: Write,
+    {
+        const NO_STATUS: &str = " ";
+
+        let Some(git) = self.git else { return Ok(()) };
+
+        // HACK cached status keys don't have a ./ prefix and git2 apparently doesn't expect it.
+        let path = self.strip_path_prefix(path);
+
+        // TODO This is repetitive. Refactor.
+        let untracked_status = git
+            .untracked_status(path)
+            .ok()
+            .flatten()
+            .map(|untracked| untracked.status());
+        let untracked_color =
+            untracked_status.and_then(|status| self.get_untracked_git_status_color(status));
+        let untracked_status = untracked_status
+            .map(|status| status.as_str())
+            .unwrap_or(NO_STATUS);
+        let tracked_status = git
+            .tracked_status(path)
+            .ok()
+            .flatten()
+            .map(|tracked| tracked.status());
+        let tracked_color =
+            tracked_status.and_then(|status| self.get_tracked_git_status_color(status));
+        let tracked_status = tracked_status
+            .map(|status| status.as_str())
+            .unwrap_or(NO_STATUS);
+
+        self.color_choice
+            .write_to(writer, untracked_status, untracked_color, None)?;
+        self.color_choice
+            .write_to(writer, tracked_status, tracked_color, None)?;
+        Ok(())
+    }
+
+    /// Gets the tracked git status color.
+    fn get_tracked_git_status_color(&self, status: Status) -> Option<Color> {
+        use Status::*;
+        use owo_colors::AnsiColors::{self, *};
+
+        const DEFAULT_ADDED: AnsiColors = Green;
+        const DEFAULT_MODIFIED: AnsiColors = Yellow;
+        const DEFAULT_REMOVED: AnsiColors = Red;
+        const DEFAULT_RENAMED: AnsiColors = Cyan;
+
+        let default_color = match status {
+            Added => DEFAULT_ADDED,
+            Modified => DEFAULT_MODIFIED,
+            Removed => DEFAULT_REMOVED,
+            Renamed => DEFAULT_RENAMED,
+        };
+        let default_color = Color::Ansi(default_color);
+        let default_color = Some(default_color);
+
+        self.colors
+            .as_ref()
+            .and_then(|config| {
+                config
+                    .for_untracked_git_status(status, default_color)
+                    .expect("Config should return a valid color")
+            })
+            .or(default_color)
+    }
+
+    /// Gets the untracked git status color.
+    fn get_untracked_git_status_color(&self, status: Status) -> Option<Color> {
+        use Status::*;
+        use owo_colors::AnsiColors::{self, *};
+
+        const DEFAULT_ADDED: AnsiColors = BrightGreen;
+        const DEFAULT_MODIFIED: AnsiColors = BrightYellow;
+        const DEFAULT_REMOVED: AnsiColors = BrightRed;
+        const DEFAULT_RENAMED: AnsiColors = BrightCyan;
+
+        let default_color = match status {
+            Added => DEFAULT_ADDED,
+            Modified => DEFAULT_MODIFIED,
+            Removed => DEFAULT_REMOVED,
+            Renamed => DEFAULT_RENAMED,
+        };
+        let default_color = Color::Ansi(default_color);
+        let default_color = Some(default_color);
+
+        self.colors
+            .as_ref()
+            .and_then(|config| {
+                config
+                    .for_tracked_git_status(status, default_color)
+                    .expect("Config should return a valid color")
+            })
+            .or(default_color)
+    }
+
+    /// Strips the root path prefix, which is necessary for git tools.
+    fn strip_path_prefix<'path>(&self, path: &'path Path) -> &'path Path {
+        let root = self.root.as_ref();
+        let path = path
+            .strip_prefix(root)
+            .expect("Should be able to strip the root path");
+        path
     }
 }

@@ -17,9 +17,19 @@ local path = {
   glob_matches = glob_matches,
 }
 
+---@param path string
+---@return boolean
+local function is_ignored(path) end
+
+---@class Git
+local git = {
+  is_ignored = is_ignored,
+}
+
 ---@class FancyTree
 ---@field is_unix boolean
 ---@field os string
+---@field git Git|nil
 fancytree = {
   path = path,
 }

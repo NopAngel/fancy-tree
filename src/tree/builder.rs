@@ -3,11 +3,14 @@ use super::Tree;
 use super::charset::Charset;
 use crate::color::ColorChoice;
 use crate::config;
+use crate::git::Git;
 use std::path::Path;
 
-pub struct Builder<'charset, P: AsRef<Path>> {
+pub struct Builder<'git, 'charset, P: AsRef<Path>> {
     /// The root path for the [`Tree`].
     root: P,
+    /// The optional git state.
+    git: Option<&'git Git>,
     color_choice: ColorChoice,
     max_level: Option<usize>,
     charset: Option<Charset<'charset>>,
@@ -16,7 +19,7 @@ pub struct Builder<'charset, P: AsRef<Path>> {
     colors: Option<config::Colors>,
 }
 
-impl<'charset, P> Builder<'charset, P>
+impl<'git, 'charset, P> Builder<'git, 'charset, P>
 where
     P: AsRef<Path>,
 {
@@ -25,12 +28,23 @@ where
     pub fn new(root: P, color_choice: ColorChoice) -> Self {
         Self {
             root,
+            git: None,
             color_choice,
             max_level: None,
             charset: None,
             config: None,
             icons: None,
             colors: None,
+        }
+    }
+
+    /// Adds a git state for the [`Tree`].
+    #[inline]
+    #[must_use]
+    pub fn git(self, git: &'git Git) -> Self {
+        Self {
+            git: Some(git),
+            ..self
         }
     }
 
@@ -85,9 +99,10 @@ where
     }
 
     /// Creates the [`Tree`].
-    pub fn build(self) -> Tree<'charset, P> {
+    pub fn build(self) -> Tree<'git, 'charset, P> {
         Tree {
             root: self.root,
+            git: self.git,
             max_level: self.max_level,
             charset: self.charset.unwrap_or_default(),
             color_choice: self.color_choice,
