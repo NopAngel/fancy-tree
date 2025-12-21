@@ -26,7 +26,6 @@ impl FileAttributes {
     where
         P: AsRef<Path>,
     {
-        // TODO Use metadata to determine hidden attribute on Windows.
         let mut contents = file.take(READ_LIMIT.into());
         let mut buf = vec![0; READ_LIMIT.into()];
         let n = contents.read(&mut buf)?;
