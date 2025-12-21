@@ -87,7 +87,7 @@ where
             // HACK We can't read the first entry for some reason, so we'll just print
             //      it and exit.
             let path = self.root.as_ref();
-            Self::write_path(writer, path, true)?;
+            Self::write_path(writer, path)?;
             return writeln!(writer);
         };
         self.write_depth(writer, entry, 0)?;
@@ -149,12 +149,7 @@ where
     }
 
     /// Writes an entry.
-    fn write_entry<W, P2>(
-        &self,
-        writer: &mut W,
-        entry: &Entry<P2>,
-        full_name: bool,
-    ) -> io::Result<()>
+    fn write_entry<W, P2>(&self, writer: &mut W, entry: &Entry<P2>, is_top: bool) -> io::Result<()>
     where
         W: Write,
         P2: AsRef<Path>,
@@ -167,28 +162,41 @@ where
         // NOTE Padding for the icons
         write!(writer, " ")?;
 
-        Self::write_path(writer, path, full_name)
+        // HACK is_path_ignored tries to strip the prefix, which we never want to do at
+        //      the top when the path is *only* the prefix. In fact, we don't want to
+        //      check ignore status here at all since the current implementation breaks
+        //      for paths that contain the directory `.`, it seems. Also, the top
+        //      should always be a directory, and the current implementation only seems
+        //      to work for files.
+        let is_ignored = !is_top && self.is_path_ignored(path);
+
+        let path = if is_top {
+            path.as_os_str()
+        } else {
+            // NOTE The only time the path shouldn't have a file name is at the top
+            //      level, which could be a path like "." or "..". At the top level
+            //      call, `full_name` should always receive `true`.
+            path.file_name()
+                .expect("A directory entry should always have a file name")
+        };
+
+        if !is_ignored {
+            Self::write_path(writer, path)
+        } else {
+            const TEXT_COLOR: Option<Color> = Some(Color::Ansi(AnsiColors::Black));
+            self.color_choice
+                .write_to(writer, path.display(), TEXT_COLOR, None)
+        }
     }
 
     /// Writes a path's name.
-    fn write_path<W, P2>(writer: &mut W, path: P2, full_name: bool) -> io::Result<()>
+    fn write_path<W, P2>(writer: &mut W, path: P2) -> io::Result<()>
     where
         W: Write,
         P2: AsRef<Path>,
     {
         let path = path.as_ref();
-
-        if full_name {
-            writer.write_all(path.as_os_str().as_encoded_bytes())
-        } else {
-            // NOTE The only time the path shouldn't have a file name is at the top
-            //      level, which could be a path like "." or "..". At the top level
-            //      call, `full_name` should always receive `true`.
-            let path = path
-                .file_name()
-                .expect("A directory entry should always have a file name");
-            writer.write_all(path.as_encoded_bytes())
-        }
+        writer.write_all(path.as_os_str().as_encoded_bytes())
     }
 
     /// Writes indentation.
@@ -212,19 +220,25 @@ where
         P2: AsRef<Path>,
     {
         let path = entry.path();
-        // HACK repository.is_path_ignored apparently doesn't expect a ./ prefix (and
-        //      returns `true` if it has the prefix???)
-        let path = self.strip_path_prefix(path);
-        let is_hidden = entry.is_hidden()
-            || self
-                .git
-                .and_then(|git| git.is_ignored(path).ok())
-                .unwrap_or(false);
+        let is_hidden = entry.is_hidden() || self.is_path_ignored(path);
         self.config
             .as_ref()
             .and_then(|config| config.should_skip(entry, is_hidden).transpose().ok())
             .flatten()
             .unwrap_or(is_hidden)
+    }
+
+    /// Checks if a path is ignored.
+    fn is_path_ignored<P2>(&self, path: P2) -> bool
+    where
+        P2: AsRef<Path>,
+    {
+        // HACK This function doesn't expect a `./` prefix. It seems to return `true`
+        //      when it's present???
+        let path = self.strip_path_prefix(path.as_ref());
+        self.git
+            .and_then(|git| git.is_ignored(path).ok())
+            .unwrap_or(false)
     }
 
     /// Gets the icon for an entry.
