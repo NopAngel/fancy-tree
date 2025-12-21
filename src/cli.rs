@@ -124,9 +124,9 @@ impl Cli {
 
         // NOTE If we can't check if it exists, we'll be safe and skip overwriting it.
         if !file_path.try_exists().unwrap_or(false) {
-            // NOTE Do nothing, because editing the file is a higher priority than
+            // NOTE Ignore error, because editing the file is a higher priority than
             //      writing to it.
-            fs::write(&file_path, contents).ok();
+            let _ = fs::write(&file_path, contents);
         }
 
         println!("Opening `{}`", file_path.display());
