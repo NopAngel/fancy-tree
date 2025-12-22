@@ -12,11 +12,11 @@ to determine the appropriate icon and what color the icon should be.
 ### Git Integration
 
 - Git status is displayed
-- Git ignored files are dimmed
+- Git ignored files' filenames are dimmed
 
 ## Configuration
 
-*You can edit a config file by calling `fancy-tree --edit-config [CONFIG]`.
+*You can edit a config file by calling `fancy-tree --edit-config [CONFIG]`.*
 
 The configuration files are Lua modules, which makes them runnable scripts and allow for
 complex behavior if wanted. This tool provides a small API under the `fancytree` global
@@ -25,6 +25,8 @@ table. Check out [`lua/meta`](./lua/meta/) to see the available utilities.
 ### `config.lua`
 
 See the [default file][default-main-config] for an example.
+
+This configures general settings.
 
 ### `icons.lua`
 
@@ -44,5 +46,13 @@ return function(filename, attributes, default)
 end
 ```
 
+### `colors.lua`
+
+See the [default file][default-color-config] for an example.
+
+This provides a function to decide the color for a file's icon, and also functions to
+set the colors for git statuses.
+
 [default-main-config]: ./src/config/main/config.lua
+[default-color-config]: ./src/config/colors/colors.lua
 [default-icon-config]: ./src/config/icons/icons.lua
