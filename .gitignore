@@ -1,1 +1,5 @@
+# Python files
+.venv/
+
+# Rust build files
 /target
