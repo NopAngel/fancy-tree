@@ -13,6 +13,7 @@ exclude = [
     "/lua/",
     "/scripts/",
 ]
+rust-version = "1.92"
 
 [features]
 default = ["git-vendored", "lua54", "lua-vendored"]
