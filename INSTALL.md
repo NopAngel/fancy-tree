@@ -10,6 +10,12 @@ Installation instructions.
 sh <(curl --proto '=https' 'https://raw.githubusercontent.com/spenserblack/fancy-tree/refs/heads/main/scripts/install.sh')
 ```
 
+### Windows
+
+```powershell
+Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/spenserblack/fancy-tree/refs/heads/main/scripts/install.ps1" | Invoke-Expression
+```
+
 ### Manual
 
 Visit the [latest release](https://github.com/spenserblack/fancy-tree/releases/latest/) page.
