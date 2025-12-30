@@ -78,7 +78,6 @@ impl Cli {
         let colors = config_dir.load_colors(lua_inner)
             .expect("The color configuration should be valid");
 
-        // Determine color choice with less nesting
         let color_choice = self.color_choice
             .or_else(|| config.as_ref().and_then(|config| config.color_choice()))
             .unwrap_or_default();
