@@ -69,34 +69,44 @@ impl Cli {
 
         // TODO Skip loading the config instead of panicking.
         let config_dir = ConfigDir::new().expect("A config dir should be available");
-        
+
         let lua_inner = lua_state.to_inner();
-        let config = config_dir.load_main(lua_inner)
+        let config = config_dir
+            .load_main(lua_inner)
             .expect("The configuration should be valid");
-        let icons = config_dir.load_icons(lua_inner)
+        let icons = config_dir
+            .load_icons(lua_inner)
             .expect("The icon configuration should be valid");
-        let colors = config_dir.load_colors(lua_inner)
+        let colors = config_dir
+            .load_colors(lua_inner)
             .expect("The color configuration should be valid");
 
-        let color_choice = self.color_choice
+        let color_choice = self
+            .color_choice
             .or_else(|| config.as_ref().and_then(|config| config.color_choice()))
             .unwrap_or_default();
 
         let mut builder = tree::Builder::new(&self.path, color_choice);
-        
+
         // NOTE Apply configurations if they exist
-        builder = config.map(|c| builder.config(c)).unwrap_or(builder);
-        builder = icons.map(|i| builder.icons(i)).unwrap_or(builder);
-        builder = colors.map(|c| builder.colors(c)).unwrap_or(builder);
-        
+        if let Some(config) = config {
+            builder = builder.config(config);
+        }
+        if let Some(icons) = icons {
+            builder = builder.icons(icons);
+        }
+        if let Some(colors) = colors {
+            builder = builder.colors(colors);
+        }
+
         if let Some(ref git) = git {
             builder = builder.git(git);
         }
-        
+
         if let Some(level) = self.level {
             builder = builder.max_level(level);
         }
-        
+
         let tree = builder.build();
 
         lua_state.in_git_scope(|| tree.write_to_stdout().map_err(mlua::Error::external))?;
