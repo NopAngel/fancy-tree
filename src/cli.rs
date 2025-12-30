@@ -120,7 +120,7 @@ impl Cli {
             EditConfig::Colors => (config_dir.colors_path(), config::Colors::DEFAULT_MODULE),
         };
 
-        // Create file if it doesn't exist
+        // NOTE If we can't check if it exists, we'll be safe and skip overwriting it.
         if !file_path.try_exists().unwrap_or(false) {
             // NOTE Ignore error, because editing the file is a higher priority than
             //      writing to it.
