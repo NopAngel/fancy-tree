@@ -27,14 +27,14 @@ pub struct Tree<'git, 'charset, P: AsRef<Path>> {
     git: Option<&'git Git>,
     /// The maximum depth level to display.
     max_level: Option<usize>,
+    /// Overrides the configured color choice (e.g. if specified in the CLI).
+    color_choice: Option<ColorChoice>,
     /// Provides the characters to print when traversing the directory structure.
     charset: Charset<'charset>,
-    /// Controls how the tree colorizes output.
-    color_choice: ColorChoice,
     /// Provides configuration choices.
     ///
     /// When this is `None`, default behaviors will be used.
-    config: Option<config::Main>,
+    config: config::Main,
     /// Provides icon configuration.
     icons: config::Icons,
     /// Provides color configuration.
@@ -162,7 +162,7 @@ where
             Self::write_path(writer, path)
         } else {
             const TEXT_COLOR: Option<Color> = Some(Color::Ansi(AnsiColors::Black));
-            self.color_choice
+            self.color_choice()
                 .write_to(writer, path.display(), TEXT_COLOR, None)
         }
     }
@@ -198,12 +198,8 @@ where
         P2: AsRef<Path>,
     {
         let path = entry.path();
-        let is_hidden = entry.is_hidden() || self.is_path_ignored(path);
         self.config
-            .as_ref()
-            .and_then(|config| config.should_skip(entry, is_hidden).transpose().ok())
-            .flatten()
-            .unwrap_or(is_hidden)
+            .should_skip(entry, || self.is_path_ignored(path))
     }
 
     /// Checks if a path is ignored.
@@ -235,13 +231,15 @@ where
         D: Display + OwoColorize,
         P2: AsRef<Path>,
     {
+        let color_choice = self.color_choice();
+
         // HACK Optimization to avoid calculating colors when they're disabled.
-        if self.color_choice.is_off() {
+        if color_choice.is_off() {
             return write!(writer, "{display}");
         }
 
         let fg = self.colors.for_icon(entry);
-        self.color_choice.write_to(writer, display, fg, None)
+        color_choice.write_to(writer, display, fg, None)
     }
 
     /// Writes colorized git statuses.
@@ -273,7 +271,7 @@ where
         let status = git.status::<S, _>(path).ok().flatten();
         let color = status.and_then(|status| S::get_color(&self.colors, status));
         let status = status.map(|status| status.as_str()).unwrap_or(NO_STATUS);
-        self.color_choice.write_to(writer, status, color, None)
+        self.color_choice().write_to(writer, status, color, None)
     }
 
     /// Strips the root path prefix, which is necessary for git tools.
@@ -299,6 +297,11 @@ where
             .strip_prefix(git_root)
             .expect("Path should have the git root as a prefix");
         Some(path.to_path_buf())
+    }
+
+    /// Gets the color choice to use.
+    fn color_choice(&self) -> ColorChoice {
+        self.color_choice.unwrap_or(self.config.color_choice())
     }
 }
 
