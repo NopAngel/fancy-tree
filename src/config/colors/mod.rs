@@ -1,10 +1,11 @@
 //! Module for configuring colors.
 use super::ConfigFile;
 use crate::color::Color;
-use crate::git::status::Status;
+use crate::git::status::{self, Status};
 use crate::lua::interop;
 use crate::tree::Entry;
 use mlua::{FromLua, Lua};
+use owo_colors::AnsiColors;
 use std::path::Path;
 
 /// The configuration for application colors.
@@ -32,21 +33,23 @@ impl Colors {
     }
 
     /// Get the color for an untracked file's status.
-    pub fn for_untracked_git_status(
-        &self,
-        status: Status,
-        default_choice: Option<Color>,
-    ) -> mlua::Result<Option<Color>> {
-        self.git_statuses.untracked.call((status, default_choice))
+    pub fn for_untracked_git_status(&self, status: Status) -> Option<Color> {
+        self.git_statuses.get_untracked_color(status)
     }
 
     /// Get the color for an tracked file's status.
-    pub fn for_tracked_git_status(
-        &self,
-        status: Status,
-        default_choice: Option<Color>,
-    ) -> mlua::Result<Option<Color>> {
-        self.git_statuses.tracked.call((status, default_choice))
+    pub fn for_tracked_git_status(&self, status: Status) -> Option<Color> {
+        self.git_statuses.get_tracked_color(status)
+    }
+
+    /// Gets the default color for an untracked status.
+    pub(crate) fn default_for_untracked(status: Status) -> Option<Color> {
+        GitStatuses::get_default_color::<status::Untracked>(status)
+    }
+
+    /// Gets the default color for a tracked status.
+    pub(crate) fn default_for_tracked(status: Status) -> Option<Color> {
+        GitStatuses::get_default_color::<status::Tracked>(status)
     }
 }
 
@@ -62,7 +65,9 @@ impl FromLua for Colors {
 
         let table = mlua::Table::from_lua(value, lua)?;
         let for_icon = table.get::<mlua::Function>(FOR_ICON_KEY)?;
-        let git_statuses = table.get::<GitStatuses>(GIT_STATUSES_KEY)?;
+        let git_statuses = table
+            .get::<Option<GitStatuses>>(GIT_STATUSES_KEY)?
+            .unwrap_or_default();
 
         let colors = Self {
             for_icon,
@@ -73,12 +78,48 @@ impl FromLua for Colors {
 }
 
 /// The configuration for git status colors.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct GitStatuses {
     /// Function to get the color for tracked statuses.
-    tracked: mlua::Function,
+    tracked: Option<mlua::Function>,
     /// Function to get the color for untracked statuses.
-    untracked: mlua::Function,
+    untracked: Option<mlua::Function>,
+}
+
+impl GitStatuses {
+    /// Gets the default color for a git status.
+    const fn get_default_color<S>(status: Status) -> Option<Color>
+    where
+        S: StatusColor,
+    {
+        let color = match status {
+            Status::Added => S::DEFAULT_ADDED,
+            Status::Modified => S::DEFAULT_MODIFIED,
+            Status::Removed => S::DEFAULT_REMOVED,
+            Status::Renamed => S::DEFAULT_RENAMED,
+        };
+        Some(Color::Ansi(color))
+    }
+
+    /// Gets the color for a tracked git status.
+    fn get_tracked_color(&self, status: Status) -> Option<Color> {
+        let default = Self::get_default_color::<status::Tracked>(status);
+        // TODO Report error
+        self.tracked.as_ref().map_or(default, |f| {
+            f.call::<Option<Color>>((status, default))
+                .unwrap_or(default)
+        })
+    }
+
+    /// Gets the color for an untracked git status.
+    fn get_untracked_color(&self, status: Status) -> Option<Color> {
+        let default = Self::get_default_color::<status::Untracked>(status);
+        // TODO Report error
+        self.untracked.as_ref().map_or(default, |f| {
+            f.call::<Option<Color>>((status, default))
+                .unwrap_or(default)
+        })
+    }
 }
 
 impl FromLua for GitStatuses {
@@ -87,10 +128,36 @@ impl FromLua for GitStatuses {
         const UNTRACKED_KEY: &str = "untracked";
 
         let table = mlua::Table::from_lua(value, lua)?;
-        let tracked = table.get::<mlua::Function>(TRACKED_KEY)?;
-        let untracked = table.get::<mlua::Function>(UNTRACKED_KEY)?;
+        let tracked = table.get(TRACKED_KEY)?;
+        let untracked = table.get(UNTRACKED_KEY)?;
 
         let git_statuses = Self { tracked, untracked };
         Ok(git_statuses)
     }
+}
+
+/// Private trait to generalize getting the color for a status.
+trait StatusColor {
+    /// Default color for added status.
+    const DEFAULT_ADDED: AnsiColors;
+    /// Default color for modified status.
+    const DEFAULT_MODIFIED: AnsiColors;
+    /// Default color for removed status.
+    const DEFAULT_REMOVED: AnsiColors;
+    /// Default color for renamed status.
+    const DEFAULT_RENAMED: AnsiColors;
+}
+
+impl StatusColor for status::Tracked {
+    const DEFAULT_ADDED: AnsiColors = AnsiColors::Green;
+    const DEFAULT_MODIFIED: AnsiColors = AnsiColors::Yellow;
+    const DEFAULT_REMOVED: AnsiColors = AnsiColors::Red;
+    const DEFAULT_RENAMED: AnsiColors = AnsiColors::Cyan;
+}
+
+impl StatusColor for status::Untracked {
+    const DEFAULT_ADDED: AnsiColors = AnsiColors::BrightGreen;
+    const DEFAULT_MODIFIED: AnsiColors = AnsiColors::BrightYellow;
+    const DEFAULT_REMOVED: AnsiColors = AnsiColors::BrightRed;
+    const DEFAULT_RENAMED: AnsiColors = AnsiColors::BrightCyan;
 }
