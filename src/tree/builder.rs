@@ -108,7 +108,7 @@ where
             color_choice: self.color_choice,
             config: self.config,
             icons: self.icons.unwrap_or_default(),
-            colors: self.colors,
+            colors: self.colors.unwrap_or_default(),
         }
     }
 }

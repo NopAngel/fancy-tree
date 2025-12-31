@@ -3,33 +3,52 @@ use super::ConfigFile;
 use crate::color::Color;
 use crate::git::status::{self, Status};
 use crate::lua::interop;
-use crate::tree::Entry;
+use crate::tree::{
+    Entry,
+    entry::{Attributes, attributes::FileAttributes},
+};
 use mlua::{FromLua, Lua};
 use owo_colors::AnsiColors;
 use std::path::Path;
 
 /// The configuration for application colors.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Colors {
     /// Function to get the color for an entry's icon.
-    for_icon: mlua::Function,
+    for_icon: Option<mlua::Function>,
     git_statuses: GitStatuses,
 }
 
 impl Colors {
+    /// The default color to use for files.
+    const DEFAULT_FILE_COLOR: Option<Color> = None;
+    /// The default color to use when a file is an executable.
+    const DEFAULT_EXECUTABLE_COLOR: Option<Color> = Some(Color::Ansi(AnsiColors::Green));
+    /// The default color to use for directories/folders.
+    const DEFAULT_DIRECTORY_COLOR: Option<Color> = Some(Color::Ansi(AnsiColors::Blue));
+    /// The default color to use for symlinks.
+    const DEFAULT_SYMLINK_COLOR: Option<Color> = Some(Color::Ansi(AnsiColors::Cyan));
+
     /// Get the color for an entry's icon.
-    pub fn for_icon<P>(
-        &self,
-        entry: &Entry<P>,
-        default_choice: Option<Color>,
-    ) -> mlua::Result<Option<Color>>
+    pub fn for_icon<P>(&self, entry: &Entry<P>) -> Option<Color>
     where
         P: AsRef<Path>,
     {
         let path = entry.path();
+        let default: Option<Color> = match entry.attributes() {
+            Attributes::Directory(_) => Self::DEFAULT_DIRECTORY_COLOR,
+            Attributes::File(attributes) => Self::get_file_color(attributes),
+            Attributes::Symlink(_) => Self::DEFAULT_SYMLINK_COLOR,
+        };
         let attributes = interop::FileAttributes::from(entry);
 
-        self.for_icon.call((path, attributes, default_choice))
+        // TODO Report error
+        self.for_icon
+            .as_ref()
+            .map_or(Ok(default), |f| {
+                f.call::<Option<Color>>((path, attributes, default))
+            })
+            .unwrap_or(default)
     }
 
     /// Get the color for an untracked file's status.
@@ -42,14 +61,19 @@ impl Colors {
         self.git_statuses.get_tracked_color(status)
     }
 
-    /// Gets the default color for an untracked status.
-    pub(crate) fn default_for_untracked(status: Status) -> Option<Color> {
-        GitStatuses::get_default_color::<status::Untracked>(status)
-    }
-
-    /// Gets the default color for a tracked status.
-    pub(crate) fn default_for_tracked(status: Status) -> Option<Color> {
-        GitStatuses::get_default_color::<status::Tracked>(status)
+    /// Gets the color for a file.
+    fn get_file_color(attributes: &FileAttributes) -> Option<Color> {
+        attributes
+            .language()
+            .map(|language| language.rgb())
+            .map(|(r, g, b)| Color::Rgb(r, g, b))
+            .or_else(|| {
+                attributes
+                    .is_executable()
+                    .then_some(Self::DEFAULT_EXECUTABLE_COLOR)
+                    .flatten()
+            })
+            .or(Self::DEFAULT_FILE_COLOR)
     }
 }
 
@@ -64,7 +88,7 @@ impl FromLua for Colors {
         const GIT_STATUSES_KEY: &str = "git_statuses";
 
         let table = mlua::Table::from_lua(value, lua)?;
-        let for_icon = table.get::<mlua::Function>(FOR_ICON_KEY)?;
+        let for_icon = table.get(FOR_ICON_KEY)?;
         let git_statuses = table
             .get::<Option<GitStatuses>>(GIT_STATUSES_KEY)?
             .unwrap_or_default();

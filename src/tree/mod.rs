@@ -1,6 +1,7 @@
 //! Provides the utility for generating a tree.
 use crate::color::{Color, ColorChoice};
 use crate::config;
+use crate::git::status::StatusGetter;
 use crate::git::{
     Git,
     status::{self, Status},
@@ -8,7 +9,6 @@ use crate::git::{
 pub use builder::Builder;
 pub use charset::Charset;
 pub use entry::Entry;
-use entry::attributes::{Attributes, FileAttributes};
 use owo_colors::AnsiColors;
 use owo_colors::OwoColorize;
 use std::fmt::Display;
@@ -38,24 +38,13 @@ pub struct Tree<'git, 'charset, P: AsRef<Path>> {
     /// Provides icon configuration.
     icons: config::Icons,
     /// Provides color configuration.
-    ///
-    /// When this is `None`, default behaviors will be used.
-    colors: Option<config::Colors>,
+    colors: config::Colors,
 }
 
 impl<'git, 'charset, P> Tree<'git, 'charset, P>
 where
     P: AsRef<Path>,
 {
-    /// The default color to use for files.
-    const DEFAULT_FILE_COLOR: Option<Color> = None;
-    /// The default color to use when a file is an executable.
-    const DEFAULT_EXECUTABLE_COLOR: Option<Color> = Some(Color::Ansi(AnsiColors::Green));
-    /// The default color to use for directories/folders.
-    const DEFAULT_DIRECTORY_COLOR: Option<Color> = Some(Color::Ansi(AnsiColors::Blue));
-    /// The default color to use for symlinks.
-    const DEFAULT_SYMLINK_COLOR: Option<Color> = Some(Color::Ansi(AnsiColors::Cyan));
-
     /// Writes the tree to stdout.
     #[inline]
     pub fn write_to_stdout(&self) -> crate::Result<()>
@@ -251,37 +240,8 @@ where
             return write!(writer, "{display}");
         }
 
-        let fg = match entry.attributes() {
-            Attributes::Directory(_) => Self::DEFAULT_DIRECTORY_COLOR,
-            Attributes::File(attributes) => Self::get_file_color(attributes),
-            Attributes::Symlink(_) => Self::DEFAULT_SYMLINK_COLOR,
-        };
-        let fg = self
-            .colors
-            .as_ref()
-            .and_then(|colors| {
-                colors
-                    .for_icon(entry, fg)
-                    .expect("Colors configuration should be valid")
-            })
-            .or(fg);
-
+        let fg = self.colors.for_icon(entry);
         self.color_choice.write_to(writer, display, fg, None)
-    }
-
-    /// Gets the color for a file.
-    fn get_file_color(attributes: &FileAttributes) -> Option<Color> {
-        attributes
-            .language()
-            .map(|language| language.rgb())
-            .map(|(r, g, b)| Color::Rgb(r, g, b))
-            .or_else(|| {
-                attributes
-                    .is_executable()
-                    .then_some(Self::DEFAULT_EXECUTABLE_COLOR)
-                    .flatten()
-            })
-            .or(Self::DEFAULT_FILE_COLOR)
     }
 
     /// Writes colorized git statuses.
@@ -301,17 +261,17 @@ where
         Ok(())
     }
 
-    /// Writes a colorized git status.
+    /// Writes a colorized untracked (worktree) git status.
     fn write_status<S, W, P2>(&self, writer: &mut W, git: &Git, path: P2) -> io::Result<()>
     where
-        S: status::StatusGetter + GitStatusColor,
+        S: StatusGetter + ColoredStatus,
         W: Write,
         P2: AsRef<Path>,
     {
         const NO_STATUS: &str = " ";
 
         let status = git.status::<S, _>(path).ok().flatten();
-        let color = status.and_then(|status| S::get_color(self.colors.as_ref(), status));
+        let color = status.and_then(|status| S::get_color(&self.colors, status));
         let status = status.map(|status| status.as_str()).unwrap_or(NO_STATUS);
         self.color_choice.write_to(writer, status, color, None)
     }
@@ -342,27 +302,22 @@ where
     }
 }
 
-// HACK Remove this when color config is non-optional
-/// Private trait to choose which color getter to use.
-trait GitStatusColor {
-    /// Gets the color from the configuration.
-    fn get_color(config: Option<&config::Colors>, status: Status) -> Option<Color>;
+/// Private trait to generalize writing statuses.
+trait ColoredStatus {
+    /// Gets the color for the status.
+    fn get_color(config: &config::Colors, status: Status) -> Option<Color>;
 }
 
-impl GitStatusColor for status::Tracked {
-    fn get_color(config: Option<&config::Colors>, status: Status) -> Option<Color> {
-        config.map_or_else(
-            || config::Colors::default_for_tracked(status),
-            |config| config.for_tracked_git_status(status),
-        )
+impl ColoredStatus for status::Untracked {
+    #[inline]
+    fn get_color(config: &config::Colors, status: Status) -> Option<Color> {
+        config.for_untracked_git_status(status)
     }
 }
 
-impl GitStatusColor for status::Untracked {
-    fn get_color(config: Option<&config::Colors>, status: Status) -> Option<Color> {
-        config.map_or_else(
-            || config::Colors::default_for_untracked(status),
-            |config| config.for_untracked_git_status(status),
-        )
+impl ColoredStatus for status::Tracked {
+    #[inline]
+    fn get_color(config: &config::Colors, status: Status) -> Option<Color> {
+        config.for_tracked_git_status(status)
     }
 }
