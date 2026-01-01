@@ -16,8 +16,9 @@ View [`INSTALL.md`](./INSTALL.md)
 [Nerd Fonts](https://www.nerdfonts.com/) are used for file icons. Each file is analyzed to determine the appropriate icon and color.
 
 ### Git Integration
- - Git status is displayed
- - Git ignored files' filenames are dimmed
+
+- Git status is displayed
+- Git ignored files' filenames are dimmed
 
 ### Highly Configurable
  - Customize icons, colors, and behavior through Lua configuration files.
